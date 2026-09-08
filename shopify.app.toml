@@ -1,0 +1,29 @@
+# Config cho Shopify CLI.
+# App da tao san tren Dev Dashboard: app id 420645470209, org 198828422
+# QUAN TRONG: doi application_url + redirect_urls thanh domain Railway that
+# sau khi deploy, roi chay:  shopify app deploy
+
+name = "Bulk Fulfill"
+handle = "bulk-fulfill"
+client_id = "661ebbd97283bd4b444e81863f66aff3"
+application_url = "https://bulk-fulfill-production.up.railway.app"
+embedded = true
+
+[access_scopes]
+# Shopify tu cai va xin quyen (managed installation) - khong can luong OAuth redirect
+scopes = "read_orders,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders"
+
+[auth]
+redirect_urls = [
+  "https://bulk-fulfill-production.up.railway.app/auth/callback"
+]
+
+[webhooks]
+api_version = "2026-07"
+
+[pos]
+embedded = false
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true

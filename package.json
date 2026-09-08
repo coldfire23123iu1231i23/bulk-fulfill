@@ -1,0 +1,20 @@
+{
+  "name": "loom-bulk-fulfill",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bulk fulfillment app for Shopify - list unfulfilled orders, enter tracking, auto-detect carrier",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/*.test.js && node test/parity.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2"
+  }
+}
