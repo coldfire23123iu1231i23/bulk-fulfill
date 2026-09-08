@@ -81,7 +81,15 @@ input.trk{width:210px;background:var(--bg);border:1px solid var(--line);
 input.trk:focus{outline:none;border-color:var(--accent);background:var(--panel)}
 input.trk.filled{border-color:var(--ok)}
 select.car{background:var(--bg);border:1px solid var(--line);border-radius:7px;
-  padding:6px 8px;font-size:12.5px;max-width:165px}
+  padding:6px 8px;font-size:12.5px;max-width:165px;width:100%}
+.carcell{display:flex;flex-direction:column;gap:5px;max-width:175px}
+input.trkurl{width:100%;background:var(--bg);border:1px dashed var(--line);border-radius:7px;
+  padding:6px 8px;font-size:11.5px;font-family:ui-monospace,SFMono-Regular,monospace}
+input.trkurl:focus{outline:none;border-style:solid;border-color:var(--accent);background:var(--panel)}
+input.trkurl.bad{border-style:solid;border-color:var(--err)}
+.urlhint{font-size:10.5px;color:var(--muted);line-height:1.35}
+.urlhint.bad{color:var(--err)}
+.urlhint code{font-size:10.5px;background:var(--bg);padding:0 3px;border-radius:3px}
 .guess{font-size:11px;margin-top:3px;color:var(--muted)}
 .guess.auto{color:var(--ok)}
 .guess.unsure{color:var(--warn)}
@@ -187,7 +195,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 
 <div class="actionbar">
   <span class="count"><span id="selCount">0</span> đơn đã chọn</span>
-  <span class="pill" id="readyCount">0 đơn có tracking</span>
+  <span class="pill" id="readyCount">0 đơn sẵn sàng</span>
   <label class="chk" style="padding:0"><input type="checkbox" id="notify"> Gửi mail báo vận chuyển cho khách</label>
   <div class="spacer"></div>
   <button class="btn" id="fillDown" title="Điền carrier của dòng đầu cho mọi dòng đã chọn">Đồng bộ carrier</button>

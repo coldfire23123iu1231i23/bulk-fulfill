@@ -32,6 +32,8 @@ function detect(raw){
 /* ---------- state ---------- */
 const $ = (s)=>document.querySelector(s);
 const state = { orders:[], cursor:null, hasNext:false, carriers:[], rows:new Map(), done:new Set() };
+let lastUrl = '';
+try{ lastUrl = localStorage.getItem('bf-last-url') || ''; }catch{}
 const esc = (s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* ---------- che do chay: nhung trong Shopify Admin hay mo truc tiep ---------- */
@@ -144,7 +146,7 @@ function render(){
   $('#moreBtn').classList.toggle('hidden', !state.hasNext);
 
   for(const o of state.orders){
-    if(!state.rows.has(o.id)) state.rows.set(o.id,{checked:false,tracking:'',company:''});
+    if(!state.rows.has(o.id)) state.rows.set(o.id,{checked:false,tracking:'',company:'',url:''});
     const r = state.rows.get(o.id);
     const tr = document.createElement('tr');
     tr.dataset.id = o.id;
@@ -183,10 +185,15 @@ function render(){
         <div class="guess"></div>
       </td>
       <td>
-        <select class="car">
-          <option value="">— tự động —</option>
-          ${state.carriers.map(c=>`<option value="${esc(c)}"${r.company===c?' selected':''}>${esc(c)}</option>`).join('')}
-        </select>
+        <div class="carcell">
+          <select class="car">
+            <option value="">— tự động —</option>
+            ${state.carriers.map(c=>`<option value="${esc(c)}"${r.company===c?' selected':''}>${esc(c)}</option>`).join('')}
+          </select>
+          <input class="trkurl hidden" value="${esc(r.url)}" spellcheck="false" autocomplete="off"
+                 placeholder="https://hang-van-chuyen.com/track?no={tracking}">
+          <div class="urlhint hidden"></div>
+        </div>
       </td>
       <td class="resultCell">${isDone?'<span class="tag ok">\u2713 \u0110\u00e3 fulfill</span>':''}</td>`;
     if(isDone){
@@ -201,12 +208,48 @@ function render(){
 function paintGuess(tr){
   const id = tr.dataset.id, r = state.rows.get(id);
   const g = tr.querySelector('.guess'), sel = tr.querySelector('.car');
-  if(!r.tracking){ g.textContent=''; g.className='guess'; return; }
-  if(r.company){ g.textContent='chọn thủ công'; g.className='guess'; return; }
-  const d = detect(r.tracking);
-  g.textContent = d.confident ? `tự nhận: ${d.company}` : `không chắc → ${d.company}`;
-  g.className = 'guess ' + (d.confident?'auto':'unsure');
-  if(!sel.value) sel.title = 'Tự động: ' + d.company;
+  if(!r.tracking){ g.textContent=''; g.className='guess'; }
+  else if(r.company){ g.textContent='chọn thủ công'; g.className='guess'; }
+  else {
+    const d = detect(r.tracking);
+    g.textContent = d.confident ? `tự nhận: ${d.company}` : `không chắc → ${d.company}`;
+    g.className = 'guess ' + (d.confident?'auto':'unsure');
+    if(!sel.value) sel.title = 'Tự động: ' + d.company;
+  }
+  paintUrlField(tr);
+}
+
+/* Kiểm tra link tracking tự nhập. Cho phép {tracking} để app tự thay mã vào. */
+function checkUrl(raw){
+  const t = String(raw||'').trim();
+  if(!t) return {ok:true, empty:true};
+  if(t.length>500) return {ok:false, msg:'Link dài quá'};
+  let u;
+  try{ u = new URL(t.replaceAll('{tracking}','SAMPLE123')); }
+  catch{ return {ok:false, msg:'Link chưa hợp lệ — thiếu https:// ?'}; }
+  if(u.protocol!=='https:' && u.protocol!=='http:') return {ok:false, msg:'Link phải bắt đầu bằng https://'};
+  return {ok:true, hasVar:t.includes('{tracking}')};
+}
+
+/* Ô link chỉ hiện khi carrier là Other (chọn tay hoặc app đoán ra Other) */
+function paintUrlField(tr){
+  const r = state.rows.get(tr.dataset.id);
+  const box = tr.querySelector('.trkurl'), hint = tr.querySelector('.urlhint');
+  if(!box) return;
+  const company = r.company || (r.tracking ? detect(r.tracking).company : '');
+  const show = company === 'Other';
+
+  box.classList.toggle('hidden', !show);
+  hint.classList.toggle('hidden', !show);
+  if(!show) return;
+
+  const v = checkUrl(r.url);
+  box.classList.toggle('bad', !v.ok);
+  hint.classList.toggle('bad', !v.ok);
+  if(!v.ok) hint.textContent = v.msg;
+  else if(v.empty) hint.innerHTML = 'Shopify không biết hãng này — dán link tra cứu để khách bấm được. Bỏ trống thì khách chỉ thấy mã.';
+  else if(v.hasVar) hint.innerHTML = '<code>{tracking}</code> sẽ được thay bằng mã của từng đơn.';
+  else hint.textContent = 'Dùng đúng link này cho đơn.';
 }
 
 function effectiveCompany(o){
@@ -214,11 +257,20 @@ function effectiveCompany(o){
   return r.company || (r.tracking ? detect(r.tracking).company : null);
 }
 
+/** Dòng sẵn sàng fulfill: có tracking, và nếu có nhập link thì link phải hợp lệ */
+function rowReady(o){
+  const r = state.rows.get(o.id);
+  if(!r || !r.tracking.trim()) return false;
+  const company = r.company || detect(r.tracking).company;
+  if(company === 'Other' && r.url.trim() && !checkUrl(r.url).ok) return false;
+  return true;
+}
+
 function updateBar(){
   const sel = state.orders.filter(o=>state.rows.get(o.id)?.checked && !state.done.has(o.id));
-  const ready = sel.filter(o=>state.rows.get(o.id).tracking.trim());
+  const ready = sel.filter(rowReady);
   $('#selCount').textContent = sel.length;
-  $('#readyCount').textContent = ready.length + ' đơn có tracking';
+  $('#readyCount').textContent = ready.length + ' đơn sẵn sàng';
   $('#fulfillBtn').disabled = ready.length===0;
   $('#fulfillBtn').textContent = ready.length ? `Fulfill ${ready.length} đơn` : 'Fulfill đơn đã chọn';
 }
@@ -236,6 +288,12 @@ $('#tb').addEventListener('input',(e)=>{
     paintGuess(tr); updateBar();
   }
   if(e.target.classList.contains('car')){ r.company = e.target.value; paintGuess(tr); }
+  if(e.target.classList.contains('trkurl')){
+    r.url = e.target.value;
+    try{ localStorage.setItem('bf-last-url', r.url.trim()); }catch{}
+    paintUrlField(tr);
+    updateBar();
+  }
 });
 $('#tb').addEventListener('change',(e)=>{
   if(!e.target.classList.contains('rowchk')) return;
@@ -267,19 +325,26 @@ $('#bulkCarrier').addEventListener('change',(e)=>{
   document.querySelectorAll('#tb tr').forEach(tr=>{
     const r = state.rows.get(tr.dataset.id);
     if(!r.checked) return;
-    r.company = v; tr.querySelector('.car').value = v; paintGuess(tr);
+    r.company = v; tr.querySelector('.car').value = v;
+    if(v==='Other' && !r.url && lastUrl){ r.url = lastUrl; tr.querySelector('.trkurl').value = lastUrl; }
+    paintGuess(tr);
   });
+  updateBar();
 });
 $('#fillDown').addEventListener('click',()=>{
   const first = state.orders.find(o=>state.rows.get(o.id)?.checked);
   if(!first) return;
   const c = effectiveCompany(first); if(!c) return;
+  const url = state.rows.get(first.id).url;
   document.querySelectorAll('#tb tr').forEach(tr=>{
     const r = state.rows.get(tr.dataset.id);
     if(!r.checked) return;
-    r.company = c; tr.querySelector('.car').value = c; paintGuess(tr);
+    r.company = c; tr.querySelector('.car').value = c;
+    if(c==='Other' && url){ r.url = url; tr.querySelector('.trkurl').value = url; }
+    paintGuess(tr);
   });
-  showMsg(`Đã đặt carrier "${c}" cho mọi đơn đã chọn.`,'ok');
+  updateBar();
+  showMsg(`Đã đặt carrier "${c}"${c==='Other'&&url?' kèm link tracking':''} cho mọi đơn đã chọn.`,'ok');
 });
 
 /* Hop xac nhan tu lam - window.confirm co the bi chan trong iframe Shopify Admin */
@@ -301,10 +366,8 @@ function askConfirm(count, notify){
 
 /* ---------- fulfill ---------- */
 $('#fulfillBtn').addEventListener('click', async ()=>{
-  const picked = state.orders.filter(o=>{
-    const r = state.rows.get(o.id);
-    return r?.checked && r.tracking.trim() && !state.done.has(o.id);
-  });
+  const picked = state.orders.filter(o=>
+    state.rows.get(o.id)?.checked && !state.done.has(o.id) && rowReady(o));
   if(!picked.length) return;
   const notify = $('#notify').checked;
   const okToGo = await askConfirm(picked.length, notify);
@@ -315,6 +378,7 @@ $('#fulfillBtn').addEventListener('click', async ()=>{
     fulfillmentOrderIds:o.fulfillmentOrderIds,
     tracking:state.rows.get(o.id).tracking,
     company:effectiveCompany(o),
+    trackingUrl:effectiveCompany(o)==='Other' ? state.rows.get(o.id).url.trim() : '',
     notifyCustomer:notify,
   }));
 
