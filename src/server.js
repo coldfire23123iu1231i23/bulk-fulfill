@@ -192,6 +192,33 @@ app.post('/api/detect', requireAuth, (req, res) => {
 /* ---------------- Bulk fulfill ---------------- */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Kiem tra link tracking nguoi dung tu nhap (dung khi carrier la "Other").
+ * Cho phep chua {tracking} de app tu thay bang ma tracking cua tung don.
+ */
+export function checkTrackingUrl(raw) {
+  const tpl = String(raw || '').trim();
+  if (!tpl) return { ok: true, template: null };
+  if (tpl.length > 500) return { ok: false, error: 'Link tracking dai qua (toi da 500 ky tu)' };
+
+  let u;
+  try { u = new URL(tpl.replaceAll('{tracking}', 'SAMPLE123')); }
+  catch { return { ok: false, error: 'Link tracking khong hop le (thieu https://?)' }; }
+
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+    return { ok: false, error: `Link tracking phai bat dau bang https:// (dang la ${u.protocol})` };
+  }
+  return { ok: true, template: tpl };
+}
+
+/** Ghep ma tracking vao link. Khong co {tracking} thi giu nguyen link. */
+function buildTrackingUrl(template, number) {
+  if (!template) return null;
+  return template.includes('{tracking}')
+    ? template.replaceAll('{tracking}', encodeURIComponent(number))
+    : template;
+}
+
 app.post('/api/fulfill', requireAuth, async (req, res) => {
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
   if (!rows.length) return res.status(400).json({ error: 'Khong co dong nao duoc chon' });
@@ -215,9 +242,17 @@ app.post('/api/fulfill', requireAuth, async (req, res) => {
       continue;
     }
 
+    const urlCheck = checkTrackingUrl(row.trackingUrl);
+    if (!urlCheck.ok) {
+      results.push({ orderName, ok: false, company, error: urlCheck.error });
+      continue;
+    }
+    const tpl = urlCheck.template;
+
+    // Shopify: co url thi phai co number; co urls thi phai co numbers (khop theo vi tri)
     const trackingInfo = numbers.length > 1
-      ? { company, numbers }
-      : { company, number: numbers[0] };
+      ? { company, numbers, ...(tpl ? { urls: numbers.map((n) => buildTrackingUrl(tpl, n)) } : {}) }
+      : { company, number: numbers[0], ...(tpl ? { url: buildTrackingUrl(tpl, numbers[0]) } : {}) };
 
     try {
       // Moi fulfillment order (moi location) tao 1 fulfillment rieng
