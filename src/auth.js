@@ -47,6 +47,11 @@ export function verifySessionToken(token) {
   if (typeof payload.nbf === 'number' && payload.nbf - skew > now) {
     throw new Error('Session token chua co hieu luc');
   }
+console.log('AUTH_AUDIENCE_CHECK', JSON.stringify({
+  expectedClientId: API_KEY,
+  tokenAudience: payload.aud,
+  audienceIsArray: Array.isArray(payload.aud)
+}));
   if (payload.aud !== API_KEY) throw new Error('Session token khong danh cho app nay');
 
   const host = (u) => { try { return new URL(u).host; } catch { return ''; } };
