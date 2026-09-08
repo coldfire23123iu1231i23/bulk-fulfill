@@ -96,9 +96,8 @@ export const ORDERS_QUERY = /* GraphQL */ `
         displayFinancialStatus
         tags
         shippingLine { title code carrierIdentifier }
-        customer { firstName lastName }
         shippingAddress {
-          name address1 city provinceCode countryCodeV2 zip phone
+        name address1 city provinceCode countryCodeV2 zip phone
         }
         fulfillmentOrders(first: 10) {
           nodes {
