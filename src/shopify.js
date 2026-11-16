@@ -84,7 +84,7 @@ export async function gql(query, variables = {}, { retries = 4, shop, accessToke
 
 export const ORDERS_QUERY = /* GraphQL */ `
   query UnfulfilledOrders($first: Int!, $after: String, $query: String) {
-    orders(first: $first, after: $after, query: $query, sortKey: CREATED_AT, reverse: true) {
+    orders(first: $first, after: $after, query: $query, sortKey: CREATED_AT, reverse: false) {
       pageInfo { hasNextPage endCursor }
       nodes {
         id
@@ -96,8 +96,9 @@ export const ORDERS_QUERY = /* GraphQL */ `
         displayFinancialStatus
         tags
         shippingLine { title code carrierIdentifier }
+        customer { firstName lastName }
         shippingAddress {
-        name address1 city provinceCode countryCodeV2 zip phone
+          name address1 city provinceCode countryCodeV2 zip phone
         }
         fulfillmentOrders(first: 10) {
           nodes {
