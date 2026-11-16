@@ -169,13 +169,28 @@ app.get('/api/orders', requireAuth, async (req, res) => {
       to: req.query.to,
     });
 
-    const data = await callShopify(req, ORDERS_QUERY, { first: limit, after, query: searchQuery });
-    const conn = data.orders;
-    const orders = (conn.nodes || []).map((n) => shapeOrder(n, req.shop)).filter(Boolean);
+    // Shopify gioi han "query cost" <= 1000 moi truy van. Don kem san pham long nhau
+    // rat nang, nen lay toi da ~40 don/lan roi gop lai cho du 'limit' (100/250).
+    const CHUNK = 40;
+    let cursor = after;
+    let nodes = [];
+    let pageInfo = { hasNextPage: false, endCursor: cursor };
+    let guard = 0;
+    while (nodes.length < limit && guard < 12) {
+      guard++;
+      const want = Math.min(CHUNK, limit - nodes.length);
+      const data = await callShopify(req, ORDERS_QUERY, { first: want, after: cursor, query: searchQuery });
+      const conn = data.orders;
+      nodes.push(...(conn.nodes || []));
+      pageInfo = conn.pageInfo || pageInfo;
+      cursor = conn.pageInfo?.endCursor || cursor;
+      if (!conn.pageInfo?.hasNextPage) break;
+    }
+    const orders = nodes.map((n) => shapeOrder(n, req.shop)).filter(Boolean);
 
     res.json({
       orders,
-      pageInfo: conn.pageInfo,
+      pageInfo,
       queryUsed: searchQuery,
     });
   } catch (e) {
