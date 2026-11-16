@@ -96,7 +96,6 @@ export const ORDERS_QUERY = /* GraphQL */ `
         displayFinancialStatus
         tags
         shippingLine { title code carrierIdentifier }
-        customer { firstName lastName }
         shippingAddress {
           name address1 city provinceCode countryCodeV2 zip phone
         }
@@ -178,7 +177,7 @@ export function shapeOrder(node, shop = SHOP) {
     financialStatus: node.displayFinancialStatus,
     shippingMethod: node.shippingLine?.title || '',
     shippingCode: node.shippingLine?.code || '',
-    customer: [node.customer?.firstName, node.customer?.lastName].filter(Boolean).join(' ') || addr.name || '',
+    customer: addr.name || '',
     address: {
       name: addr.name || '',
       line1: addr.address1 || '',

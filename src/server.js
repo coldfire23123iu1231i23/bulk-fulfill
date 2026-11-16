@@ -158,7 +158,7 @@ export function buildOrderQuery({ search = '', paidOnly = false, from = '', to =
 
 app.get('/api/orders', requireAuth, async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const limit = Math.min(Number(req.query.limit) || 100, 250);
     const after = req.query.cursor || null;
     const search = String(req.query.search || '').trim();
 
