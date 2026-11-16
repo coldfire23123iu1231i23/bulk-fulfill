@@ -34,6 +34,20 @@ const $ = (s)=>document.querySelector(s);
 const state = { orders:[], cursor:null, hasNext:false, carriers:[], rows:new Map(), done:new Set() };
 let lastUrl = '';
 try{ lastUrl = localStorage.getItem('bf-last-url') || ''; }catch{}
+
+/* ---------- hãng vận chuyển tự thêm (lưu trong trình duyệt) ---------- */
+let customCarriers = [];
+try{
+  const raw = JSON.parse(localStorage.getItem('bf-custom-carriers')||'[]');
+  if(Array.isArray(raw)) customCarriers = raw.filter(c=>c && c.name).map(c=>({name:String(c.name), url:String(c.url||'')}));
+}catch{ customCarriers = []; }
+function saveCustom(){ try{ localStorage.setItem('bf-custom-carriers', JSON.stringify(customCarriers)); }catch{} }
+function findCustom(name){ return customCarriers.find(c=>c.name===name); }
+function customNames(){ return customCarriers.map(c=>c.name); }
+/** Shopify có tự sinh link tracking cho hãng này không (tên nằm trong list chuẩn, khác Other) */
+function isShopifyKnown(name){ return state.carriers.includes(name) && name!=='Other'; }
+/** Cần ô link tự nhập: Other hoặc hãng mình tự thêm (Shopify không biết) */
+function needsCustomUrl(name){ return !!name && !isShopifyKnown(name); }
 const esc = (s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* ---------- che do chay: nhung trong Shopify Admin hay mo truc tiep ---------- */
@@ -66,13 +80,78 @@ function showMsg(text, kind='err'){
   if(kind==='ok') setTimeout(()=>m.classList.add('hidden'),5000);
 }
 
+/* ---------- hộp thoại thêm / xoá hãng vận chuyển ---------- */
+function openCarrierDialog(rowId){
+  const dlg = $('#carrierDlg');
+  dlg.dataset.rowId = rowId || '';
+  $('#ccName').value = ''; $('#ccUrl').value = '';
+  $('#ccErr').classList.add('hidden');
+  renderCarrierList();
+  dlg.showModal();
+  setTimeout(()=>$('#ccName').focus(), 40);
+}
+
+function renderCarrierList(){
+  const box = $('#ccList');
+  if(!customCarriers.length){ box.innerHTML = '<div class="cc-empty">Chưa có hãng nào bạn tự thêm.</div>'; return; }
+  box.innerHTML = customCarriers.map((c,i)=>`
+    <div class="cc-item">
+      <div class="cc-info">
+        <b>${esc(c.name)}</b>
+        ${c.url ? `<span class="cc-url">${esc(c.url)}</span>` : '<span class="cc-url muted">không có link</span>'}
+      </div>
+      <button class="cc-del" data-i="${i}" type="button">Xoá</button>
+    </div>`).join('');
+}
+
+function addCustomCarrier(){
+  const name = $('#ccName').value.trim();
+  const url = $('#ccUrl').value.trim();
+  const err = $('#ccErr');
+  const fail = (m)=>{ err.textContent = m; err.classList.remove('hidden'); };
+
+  if(!name) return fail('Nhập tên hãng');
+  const exists = [...state.carriers, ...customNames()].some(c=>c.toLowerCase()===name.toLowerCase());
+  if(exists) return fail('Tên này đã có trong danh sách');
+  if(url){ const v = checkUrl(url); if(!v.ok) return fail('Link không hợp lệ: ' + v.msg); }
+
+  customCarriers.push({ name, url });
+  customCarriers.sort((a,b)=>a.name.localeCompare(b.name));
+  saveCustom();
+
+  const rowId = $('#carrierDlg').dataset.rowId;
+  if(rowId && state.rows.has(rowId)){
+    const r = state.rows.get(rowId);
+    r.company = name;
+    if(url && !r.url) r.url = url;
+  }
+  $('#carrierDlg').close();
+  fillBulkCarrier();
+  render();
+}
+
+$('#ccSave').addEventListener('click', addCustomCarrier);
+$('#ccName').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); $('#ccUrl').focus(); }});
+$('#ccUrl').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); addCustomCarrier(); }});
+$('#ccDone').addEventListener('click',()=>$('#carrierDlg').close());
+$('#ccList').addEventListener('click',(e)=>{
+  const b = e.target.closest('.cc-del'); if(!b) return;
+  const i = +b.dataset.i;
+  const removed = customCarriers[i]?.name;
+  customCarriers.splice(i,1);
+  saveCustom();
+  if(removed){ for(const r of state.rows.values()){ if(r.company===removed) r.company=''; } }
+  renderCarrierList();
+  fillBulkCarrier();
+  render();
+});
+
 /* ---------- boot ---------- */
 (async function boot(){
   const s = await api('/api/session');
   state.carriers = s.carriers || [];
   $('#notify').checked = !!s.defaultNotify;
-  const sel = $('#bulkCarrier');
-  state.carriers.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
+  fillBulkCarrier();
 
   // Nhung trong Shopify Admin: Shopify da xac thuc san, khong hoi mat khau nua
   if(!EMBEDDED && !s.authed){ $('#login').classList.remove('hidden'); return; }
@@ -132,6 +211,30 @@ $('#moreBtn').addEventListener('click',()=>load(true));
 $('#search').addEventListener('keydown',e=>{if(e.key==='Enter')load(false);});
 
 /* ---------- render ---------- */
+/* ---------- dựng option cho dropdown carrier ---------- */
+function carrierOptionsHtml(selected){
+  const main = state.carriers
+    .map(c=>`<option value="${esc(c)}"${selected===c?' selected':''}>${esc(c)}</option>`).join('');
+  const custom = customCarriers.length
+    ? `<optgroup label="Hãng của tôi">${customCarriers.map(c=>
+        `<option value="${esc(c.name)}"${selected===c.name?' selected':''}>${esc(c.name)}</option>`).join('')}</optgroup>`
+    : '';
+  return `<option value="">— tự động —</option>${main}${custom}<option value="__add__">＋ Thêm hãng mới…</option>`;
+}
+
+function fillBulkCarrier(){
+  const sel = $('#bulkCarrier'); if(!sel) return;
+  const cur = sel.value;
+  const custom = customCarriers.length
+    ? `<optgroup label="Hãng của tôi">${customCarriers.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('')}</optgroup>`
+    : '';
+  sel.innerHTML = `<option value="">— giữ tự động —</option>`
+    + state.carriers.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')
+    + custom
+    + `<option value="__add__">＋ Thêm hãng mới…</option>`;
+  sel.value = cur && sel.querySelector(`option[value="${CSS.escape(cur)}"]`) ? cur : '';
+}
+
 function render(){
   const tb = $('#tb'); tb.innerHTML='';
   if(!state.orders.length){
@@ -186,10 +289,7 @@ function render(){
       </td>
       <td>
         <div class="carcell">
-          <select class="car">
-            <option value="">— tự động —</option>
-            ${state.carriers.map(c=>`<option value="${esc(c)}"${r.company===c?' selected':''}>${esc(c)}</option>`).join('')}
-          </select>
+          <select class="car">${carrierOptionsHtml(r.company)}</select>
           <input class="trkurl hidden" value="${esc(r.url)}" spellcheck="false" autocomplete="off"
                  placeholder="https://hang-van-chuyen.com/track?no={tracking}">
           <div class="urlhint hidden"></div>
@@ -237,7 +337,7 @@ function paintUrlField(tr){
   const box = tr.querySelector('.trkurl'), hint = tr.querySelector('.urlhint');
   if(!box) return;
   const company = r.company || (r.tracking ? detect(r.tracking).company : '');
-  const show = company === 'Other';
+  const show = needsCustomUrl(company);
 
   box.classList.toggle('hidden', !show);
   hint.classList.toggle('hidden', !show);
@@ -262,7 +362,7 @@ function rowReady(o){
   const r = state.rows.get(o.id);
   if(!r || !r.tracking.trim()) return false;
   const company = r.company || detect(r.tracking).company;
-  if(company === 'Other' && r.url.trim() && !checkUrl(r.url).ok) return false;
+  if(needsCustomUrl(company) && r.url.trim() && !checkUrl(r.url).ok) return false;
   return true;
 }
 
@@ -287,7 +387,14 @@ $('#tb').addEventListener('input',(e)=>{
     }
     paintGuess(tr); updateBar();
   }
-  if(e.target.classList.contains('car')){ r.company = e.target.value; paintGuess(tr); }
+  if(e.target.classList.contains('car')){
+    const v = e.target.value;
+    if(v==='__add__'){ e.target.value = r.company || ''; openCarrierDialog(tr.dataset.id); return; }
+    r.company = v;
+    const cc = findCustom(v);
+    if(cc && cc.url && !r.url){ r.url = cc.url; const u = tr.querySelector('.trkurl'); if(u) u.value = cc.url; }
+    paintGuess(tr); updateBar();
+  }
   if(e.target.classList.contains('trkurl')){
     r.url = e.target.value;
     try{ localStorage.setItem('bf-last-url', r.url.trim()); }catch{}
@@ -322,25 +429,29 @@ $('#all').addEventListener('change',(e)=>{
 });
 $('#bulkCarrier').addEventListener('change',(e)=>{
   const v = e.target.value;
+  if(v==='__add__'){ e.target.value=''; openCarrierDialog(null); return; }
+  const cc = findCustom(v);
   document.querySelectorAll('#tb tr').forEach(tr=>{
     const r = state.rows.get(tr.dataset.id);
     if(!r.checked) return;
     r.company = v; tr.querySelector('.car').value = v;
-    if(v==='Other' && !r.url && lastUrl){ r.url = lastUrl; tr.querySelector('.trkurl').value = lastUrl; }
+    const fill = cc && cc.url ? cc.url : (v==='Other' ? lastUrl : '');
+    if(needsCustomUrl(v) && !r.url && fill){ r.url = fill; tr.querySelector('.trkurl').value = fill; }
     paintGuess(tr);
   });
   updateBar();
 });
+$('#manageCarrier').addEventListener('click',()=>openCarrierDialog(null));
 $('#fillDown').addEventListener('click',()=>{
   const first = state.orders.find(o=>state.rows.get(o.id)?.checked);
   if(!first) return;
   const c = effectiveCompany(first); if(!c) return;
-  const url = state.rows.get(first.id).url;
+  const url = state.rows.get(first.id).url || (findCustom(c)?.url || '');
   document.querySelectorAll('#tb tr').forEach(tr=>{
     const r = state.rows.get(tr.dataset.id);
     if(!r.checked) return;
     r.company = c; tr.querySelector('.car').value = c;
-    if(c==='Other' && url){ r.url = url; tr.querySelector('.trkurl').value = url; }
+    if(needsCustomUrl(c) && url){ r.url = url; tr.querySelector('.trkurl').value = url; }
     paintGuess(tr);
   });
   updateBar();
@@ -378,7 +489,7 @@ $('#fulfillBtn').addEventListener('click', async ()=>{
     fulfillmentOrderIds:o.fulfillmentOrderIds,
     tracking:state.rows.get(o.id).tracking,
     company:effectiveCompany(o),
-    trackingUrl:effectiveCompany(o)==='Other' ? state.rows.get(o.id).url.trim() : '',
+    trackingUrl:needsCustomUrl(effectiveCompany(o)) ? state.rows.get(o.id).url.trim() : '',
     notifyCustomer:notify,
   }));
 

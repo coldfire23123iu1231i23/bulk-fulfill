@@ -123,6 +123,29 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .dlg-h{padding:16px 18px;border-bottom:1px solid var(--line);font-weight:700}
 .dlg-b{padding:14px 18px;max-height:56vh;overflow:auto}
 .dlg-f{padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+#carrierDlg{max-width:440px}
+.cc-form{display:flex;flex-direction:column;gap:11px}
+.cc-lb{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:600;color:var(--ink)}
+.cc-lb .cc-opt{font-weight:400;color:var(--muted)}
+.cc-lb input{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;
+  font-size:13.5px;font-weight:400;color:var(--ink)}
+.cc-lb input:focus{outline:none;border-color:var(--accent)}
+#ccUrl{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12.5px}
+.cc-tip{font-size:11.5px;color:var(--muted);line-height:1.45}
+.cc-tip code{background:var(--bg);padding:0 4px;border-radius:3px;font-size:11.5px}
+.cc-divider{height:1px;background:var(--line);margin:16px 0 12px}
+.cc-lb2{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:8px}
+.cc-empty{font-size:13px;color:var(--muted);padding:6px 0}
+.cc-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line2)}
+.cc-item:last-child{border-bottom:none}
+.cc-info{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.cc-info b{font-size:13.5px}
+.cc-url{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-url.muted{font-family:var(--sans,inherit);font-style:italic}
+.cc-del{flex:0 0 auto;border:1px solid var(--line);background:var(--bg);color:var(--err);
+  border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
+.cc-del:hover{border-color:var(--err)}
 .res{display:flex;gap:9px;padding:7px 0;border-bottom:1px solid var(--line2);font-size:13px}
 .res:last-child{border:none}
 .bar-prog{height:4px;background:var(--line);border-radius:9px;overflow:hidden;flex:1;min-width:120px}
@@ -165,7 +188,10 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
     <button class="btn primary" id="loadBtn">Tải đơn</button>
     <div class="spacer"></div>
     <div class="f"><label>Đổi carrier hàng loạt</label>
-      <select id="bulkCarrier" class="car"><option value="">— giữ tự động —</option></select>
+      <div style="display:flex;gap:6px">
+        <select id="bulkCarrier" class="car"><option value="">— giữ tự động —</option></select>
+        <button class="btn sm" id="manageCarrier" type="button" title="Thêm / xoá hãng vận chuyển của bạn">＋ Hãng</button>
+      </div>
     </div>
   </div>
 
@@ -216,6 +242,27 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   <div class="dlg-h" id="dlgH">Đang fulfill…</div>
   <div class="dlg-b" id="dlgB"></div>
   <div class="dlg-f"><button class="btn primary" id="dlgClose">Đóng</button></div>
+</dialog>
+
+<dialog id="carrierDlg">
+  <div class="dlg-h">Hãng vận chuyển của tôi</div>
+  <div class="dlg-b">
+    <div class="cc-form">
+      <label class="cc-lb">Tên hãng
+        <input id="ccName" type="text" placeholder="VD: GHTK, J&T, VN Post" spellcheck="false" autocomplete="off" maxlength="60">
+      </label>
+      <label class="cc-lb">Link tra cứu <span class="cc-opt">(không bắt buộc)</span>
+        <input id="ccUrl" type="text" placeholder="https://hang.com/track?no={tracking}" spellcheck="false" autocomplete="off">
+      </label>
+      <div class="cc-tip">Dùng <code>{tracking}</code> để tự thay bằng mã của từng đơn. Bỏ trống thì khách chỉ thấy mã, không bấm được.</div>
+      <div id="ccErr" class="msg err hidden" style="margin:0"></div>
+      <button class="btn primary" id="ccSave" type="button">Thêm hãng</button>
+    </div>
+    <div class="cc-divider"></div>
+    <div class="cc-lb2">Đã thêm</div>
+    <div id="ccList"></div>
+  </div>
+  <div class="dlg-f"><button class="btn" id="ccDone" type="button">Xong</button></div>
 </dialog>
 
 <script src="/app.js"></script>
